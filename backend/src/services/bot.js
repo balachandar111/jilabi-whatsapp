@@ -8,6 +8,8 @@ const W = require('./whatsapp');
 const { getSettings } = require('./settings');
 const { CATS, variantsOf, resolveSku, refreshCart } = require('./catalog');
 const { rank, pickupSlots } = require('./geo');
+const { confirmPaid } = require('./confirm');
+const CONFIG = require('../config');
 
 const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 const total = (cart) => cart.reduce((t, i) => t + i.price * i.qty, 0);
@@ -178,8 +180,8 @@ async function sendSummary(to, s) {
     ? `🏬 Pickup: ${s.details.branchName}${s.details.slot ? '\n🕒 ' + s.details.slot : ''}`
     : `📍 ${s.details.address}\n🏬 From: ${s.details.branchName}${s.details.distanceKm != null ? ` (${s.details.distanceKm} km)` : ''}`;
   return W.safeButtons(to,
-    `📋 *Order Summary*\n${cartText(s.cart)}\n\nSubtotal: ${inr(sub)}\nDelivery: ${fee ? inr(fee) : 'Free'}\n*Total: ${inr(sub + fee)}*\n\n👤 ${s.details.name}\n${where}\n\nConfirm and pay?`,
-    [['pay', '✅ Pay Now'], ['cancel', '❌ Cancel']]);
+    `📋 *Order Summary*\n${cartText(s.cart)}\n\nSubtotal: ${inr(sub)}\nDelivery: ${fee ? inr(fee) : 'Free'}\n*Total: ${inr(sub + fee)}*\n\n👤 ${s.details.name}\n${where}\n\n${CONFIG.SKIP_PAYMENT ? 'Place this order?' : 'Confirm and pay?'}`,
+    [['pay', CONFIG.SKIP_PAYMENT ? '✅ Place Order' : '✅ Pay Now'], ['cancel', '❌ Cancel']]);
 }
 
 async function pay(to, s) {
@@ -193,6 +195,10 @@ async function pay(to, s) {
     fulfilment: d.fulfilment, branchCode: d.branchCode, branchName: d.branchName, distanceKm: d.distanceKm,
     location: d.lat != null ? { lat: d.lat, lng: d.lng } : undefined, pickupSlot: d.slot || '',
   });
+  if (CONFIG.SKIP_PAYMENT) {                 // TESTING: confirm instantly, no Razorpay
+    await confirmPaid(order, 'TEST-NO-PAYMENT');
+    return;
+  }
   try {
     order.paymentLink = await createPaymentLink(order);
     await order.save();

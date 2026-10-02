@@ -7,7 +7,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "seed": "node src/seed.js",
-    "test": "node test/flow.test.js"
+    "test": "node test/flow.test.js && node test/skip-payment.test.js"
   },
   "engines": {
     "node": ">=18"

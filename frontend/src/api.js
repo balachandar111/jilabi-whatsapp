@@ -1,6 +1,11 @@
 // Tiny fetch wrapper: adds the JWT, JSON-encodes bodies, throws Error(message) on failure.
 // In dev Vite proxies /api -> :5000. For a separately hosted frontend build with VITE_API_URL=https://backend/api
-const BASE = import.meta.env.VITE_API_URL || '/api';
+// Forgiving: trims spaces and trailing slashes, and adds "/api" if you forgot it.
+//   (unset)                          -> /api                  (local dev, proxied by Vite to :5000)
+//   https://x.onrender.com           -> https://x.onrender.com/api
+//   https://x.onrender.com/api/      -> https://x.onrender.com/api
+const raw = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+const BASE = !raw ? '/api' : /\/api$/.test(raw) ? raw : raw + '/api';
 
 export async function api(path, { method = 'GET', body } = {}) {
   const token = localStorage.getItem('token');

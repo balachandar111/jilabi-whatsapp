@@ -6,6 +6,7 @@ const Branch = require('../models/Branch');
 const { handle } = require('../services/bot');
 const { safeText } = require('../services/whatsapp');
 const { getSettings } = require('../services/settings');
+const c = require('../config');
 
 const validSig = (raw, secret, header, prefix = '') => {
   if (!secret || !header || !raw) return false;
@@ -25,10 +26,27 @@ const firstTime = (id) => {
 
 /* ---- Meta (WhatsApp) ---- */
 router.get('/webhook', async (req, res) => {
-  const s = await getSettings();
-  const token = req.query['hub.verify_token'];
-  if (req.query['hub.mode'] === 'subscribe' && s.verifyToken && token === s.verifyToken)
-    return res.status(200).send(req.query['hub.challenge']);
+  const mode = req.query['hub.mode'];
+  const token = String(req.query['hub.verify_token'] || '').trim();
+  const challenge = req.query['hub.challenge'];
+  const fromEnv = (c.VERIFY_TOKEN || '').trim();
+  console.log(`Webhook verify request: mode=${mode} tokenSent=${token ? 'yes(' + token.length + ' chars)' : 'NO'} envTokenSet=${fromEnv ? 'yes' : 'no'}`);
+
+  if (mode !== 'subscribe' || !challenge) {
+    console.warn('Webhook verify rejected: missing hub.mode=subscribe or hub.challenge (this is not a Meta verification request)');
+    return res.sendStatus(403);
+  }
+  // 1) VERIFY_TOKEN env var: answers instantly, no database needed
+  if (fromEnv && token === fromEnv) return res.status(200).type('text/plain').send(String(challenge));
+  // 2) Token saved from the admin Setup page (needs MongoDB; don't hang if it is down)
+  let saved = '';
+  try {
+    const s = await Promise.race([getSettings(), new Promise((_, rej) => setTimeout(() => rej(new Error('database timeout')), 4000))]);
+    saved = (s.verifyToken || '').trim();
+  } catch (e) { console.error('Webhook verify: could not read saved settings:', e.message); }
+  if (saved && token === saved) return res.status(200).type('text/plain').send(String(challenge));
+
+  console.warn(`Webhook verify rejected: token mismatch. savedTokenSet=${saved ? 'yes' : 'no'} envTokenSet=${fromEnv ? 'yes' : 'no'}`);
   res.sendStatus(403);
 });
 

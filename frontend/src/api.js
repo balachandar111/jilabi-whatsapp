@@ -15,7 +15,7 @@ export async function api(path, { method = 'GET', body } = {}) {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new Error('Cannot reach the server. Is the backend running on port 5000?');
+    throw new Error('Cannot reach the server. Check that the backend is running and VITE_API_URL / CORS (CLIENT_ORIGIN) are set correctly.');
   }
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && path !== '/auth/login') {

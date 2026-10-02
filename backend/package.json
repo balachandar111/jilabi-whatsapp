@@ -2,13 +2,13 @@
   "name": "sweetbot-backend",
   "version": "1.0.0",
   "main": "src/index.js",
- "scripts": {
-  "build": "echo no build step needed",
-  "start": "node src/index.js",
-  "dev": "nodemon src/index.js",
-  "seed": "node src/seed.js",
-  "test": "node test/flow.test.js"
-},
+  "scripts": {
+    "build": "echo no build step needed",
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "seed": "node src/seed.js",
+    "test": "node test/flow.test.js"
+  },
   "engines": {
     "node": ">=18"
   },

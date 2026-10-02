@@ -10,8 +10,25 @@ const rateLimit = require('./middleware/rateLimit');
 
 const app = express();
 app.set('trust proxy', 1);
-// CLIENT_ORIGIN can be a comma-separated list (admin app + website)
-app.use(cors({ origin: c.CLIENT_ORIGIN.split(',').map(x => x.trim()) }));
+// CLIENT_ORIGIN can be a comma-separated list (admin app + website).
+// Forgiving parsing: trims spaces/quotes, ignores a trailing "/", and supports wildcards like https://*.vercel.app
+const clean = (x) => x.trim().replace(/^['"]|['"]$/g, '').replace(/\/+$/, '');
+const allowed = c.CLIENT_ORIGIN.split(',').map(clean).filter(Boolean);
+const wildcardToRegex = (p) => new RegExp('^' + p.split('*').map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^.]+') + '$');
+const matchers = allowed.map(a => (a.includes('*') ? wildcardToRegex(a) : a));
+const originOk = (origin) => matchers.some(m => (m instanceof RegExp ? m.test(origin) : m === origin));
+console.log('CORS allowed origins:', allowed.join(', ') || '(none)');
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);                       // server-to-server (Meta, Razorpay) and curl
+    if (originOk(origin)) return cb(null, true);
+    console.warn(`CORS blocked origin: ${origin}  (allowed: ${allowed.join(', ')})`);
+    return cb(null, false);
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
+}));
 // keep raw body: needed to verify Meta + Razorpay signatures
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
@@ -23,7 +40,7 @@ app.use('/api/orders', auth, require('./routes/orders'));
 app.use('/api/branches', auth, require('./routes/branches'));
 app.use('/api/bulk', auth, require('./routes/bulk'));
 app.use('/api/settings', auth, require('./routes/settings'));
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => res.json({ ok: true, db: mongoose.connection.readyState === 1 ? 'connected' : 'not connected' }));
 
 // Serve built React admin in production
 const dist = path.join(__dirname, '../../frontend/dist');
@@ -37,8 +54,14 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ message: 'Server error' });
 });
 
-mongoose.connect(c.MONGO_URI)
-  .then(() => app.listen(c.PORT, () => console.log(`API + bot running on :${c.PORT}`)))
-  .catch(e => { console.error('MongoDB connection failed:', e.message);
-    console.error('-> Start MongoDB (docker compose up -d) or put a MongoDB Atlas connection string in backend/.env as MONGO_URI.');
-    process.exit(1); });
+// Start listening first so Render sees the service as live (and CORS/health respond) even if MongoDB is slow or misconfigured.
+app.listen(c.PORT, () => console.log(`API + bot running on :${c.PORT}`));
+
+const connectDb = () => mongoose.connect(c.MONGO_URI, { serverSelectionTimeoutMS: 10000 })
+  .then(() => console.log('MongoDB connected'))
+  .catch(e => {
+    console.error('MongoDB connection failed:', e.message);
+    console.error('-> Check MONGO_URI, the Atlas database user/password, and Atlas Network Access (allow 0.0.0.0/0). Retrying in 10s...');
+    setTimeout(connectDb, 10000);
+  });
+connectDb();

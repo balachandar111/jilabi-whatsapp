@@ -1,0 +1,24 @@
+require('dotenv').config();
+const e = process.env;
+module.exports = {
+  PORT: e.PORT || 5000,
+  MONGO_URI: e.MONGO_URI || 'mongodb://127.0.0.1:27017/sweetbot',
+  CLIENT_ORIGIN: e.CLIENT_ORIGIN || 'http://localhost:5173',
+  JWT_SECRET: e.JWT_SECRET || 'dev_secret_change_me',
+  ADMIN_USER: e.ADMIN_USER || 'admin',
+  ADMIN_PASSWORD: e.ADMIN_PASSWORD || 'ChangeMe@123',
+  VERIFY_TOKEN: e.VERIFY_TOKEN,
+  WA_TOKEN: e.WA_TOKEN,
+  PHONE_NUMBER_ID: e.PHONE_NUMBER_ID,
+  APP_SECRET: e.APP_SECRET,
+  CATALOG_ID: e.CATALOG_ID,
+  RZP_KEY_ID: e.RZP_KEY_ID,
+  RZP_KEY_SECRET: e.RZP_KEY_SECRET,
+  RZP_WEBHOOK_SECRET: e.RZP_WEBHOOK_SECRET,
+  OWNER_PHONE: e.OWNER_PHONE,
+  PUBLIC_URL: e.PUBLIC_URL || '',
+  APP_ID: e.APP_ID,
+  GRAPH_VERSION: e.GRAPH_VERSION || 'v25.0',
+  ENCRYPTION_KEY: e.ENCRYPTION_KEY,
+  SHOP_NAME: e.SHOP_NAME || 'Krishna Jelabi Kadai',
+};

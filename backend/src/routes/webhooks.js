@@ -7,7 +7,6 @@ const { handle } = require('../services/bot');
 const { safeText } = require('../services/whatsapp');
 const { getSettings } = require('../services/settings');
 const c = require('../config');
-const { confirmPaid } = require('../services/confirm');
 
 const validSig = (raw, secret, header, prefix = '') => {
   if (!secret || !header || !raw) return false;
@@ -82,8 +81,24 @@ router.post('/razorpay-webhook', async (req, res) => {
   const order = await Order.findOne({ orderId: link.reference_id });
   if (!order) return;
 
-  if (event === 'payment_link.paid' && order.paymentStatus !== 'paid')
-    await confirmPaid(order, payload.payment?.entity?.id);
+  if (event === 'payment_link.paid' && order.paymentStatus !== 'paid') {
+    order.paymentStatus = 'paid';
+    order.paidAt = new Date();
+    order.paymentId = payload.payment?.entity?.id;
+    await order.save();
+    await Session.deleteOne({ phone: order.phone });
+
+    const items = order.items.map(i => `• ${i.name}${i.variant ? ` (${i.variant})` : ''} × ${i.qty} = ₹${i.price * i.qty}`).join('\n');
+    const where = order.fulfilment === 'pickup'
+      ? `🏬 Pickup: ${order.branchName}${order.pickupSlot ? '\n🕒 ' + order.pickupSlot : ''}`
+      : `🚚 Delivery to:\n${order.address}`;
+    await safeText(order.phone, `🎉 *Order Confirmed!* Thank you, ${order.name}.\n\n*Order ${order.orderId}*\n${items}\n${order.deliveryFee ? `Delivery: ₹${order.deliveryFee}\n` : ''}*Paid: ₹${order.amount}*\n\n${where}\n\nWe'll update you here: Packed → ${order.fulfilment === 'pickup' ? 'Ready for pickup' : 'Out for delivery'} → Delivered. Send *track* anytime.`);
+
+    const alert = `🆕 PAID ORDER ${order.orderId} — ${order.fulfilment.toUpperCase()} @ ${order.branchName}\n${items}\nTotal ₹${order.amount}\n${order.name} (+${order.phone})\n${order.address}${order.pickupSlot ? '\nSlot: ' + order.pickupSlot : ''}`;
+    const branch = await Branch.findOne({ code: order.branchCode });
+    const targets = new Set([s.ownerPhone, branch?.alertPhone].filter(Boolean));
+    for (const t of targets) await safeText(t, alert);
+  }
   if ((event === 'payment_link.expired' || event === 'payment_link.cancelled') && order.paymentStatus === 'pending') {
     order.paymentStatus = 'expired'; await order.save();
   }
